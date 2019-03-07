@@ -16,27 +16,31 @@
   You should have received a copy of the GNU General Public License
   along with OPM.  If not, see <http://www.gnu.org/licenses/>.
 
-  Inspired by ErrorMacros.hpp in opm-common.
 */
 
-#ifndef OPM_DEFERREDLOGGINGERRORMACROS_HPP
-#define OPM_DEFERREDLOGGINGERRORMACROS_HPP
+#ifndef OPM_DEFERREDLOGGINGERRORHELPERS_HPP
+#define OPM_DEFERREDLOGGINGERRORHELPERS_HPP
 
 #include <opm/simulators/DeferredLogger.hpp>
+
+#include <dune/common/version.hh>
+#include <dune/common/parallel/mpihelper.hh>
 
 #include <string>
 #include <sstream>
 #include <exception>
 #include <stdexcept>
 
-// Macro to throw an exception. NOTE: For this macro to work, the
+// Macro to throw an exception.
+// Inspired by ErrorMacros.hpp in opm-common.
+// NOTE: For this macro to work, the
 // exception class must exhibit a constructor with the signature
 // (const std::string &message). Since this condition is not fulfilled
 // for the std::exception, you should use this macro with some
 // exception class derived from either std::logic_error or
 // std::runtime_error.
 //
-// Usage: OPM_THROW(ExceptionClass, "Error message " << value);
+// Usage: OPM_DEFLOG_THROW(ExceptionClass, "Error message " << value, DeferredLogger);
 #define OPM_DEFLOG_THROW(Exception, message, deferred_logger)                             \
     do {                                                                \
         std::ostringstream oss__;                                       \
@@ -45,24 +49,24 @@
         throw Exception(oss__.str());                                   \
     } while (false)
 
-#define OPM_CHECK_FOR_EXCEPTIONS_AND_THROW(exception_thrown, message)\
-    do {\
-        auto cc = Dune::MPIHelper::getCollectiveCommunication();\
-        if (cc.max(exception_thrown) == 1) {\
-            throw std::logic_error(message);\
-        }\
-    } while (false)
+inline void check_for_exceptions_and_throw(const int exception_thrown, const std::string& message)
+{
+    auto cc = Dune::MPIHelper::getCollectiveCommunication();
+    if (cc.max(exception_thrown) == 1) {
+        throw std::logic_error(message);
+    }
+}
 
-#define OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, message, terminal_output)\
-    do {\
-        auto cc = Dune::MPIHelper::getCollectiveCommunication();\
-        if (cc.max(exception_thrown) == 1) {\
-            Opm::DeferredLogger global_deferredLogger = gatherDeferredLogger(deferred_logger);\
-            if (terminal_output) {\
-                global_deferredLogger.logMessages();\
-            }\
-            throw std::logic_error(message);\
-        }\
-    } while (false)
+inline void check_for_exceptions_and_log_and_throw(Opm::DeferredLogger& deferred_logger, const int exception_thrown, const std::string& message, const bool terminal_output)
+{
+    auto cc = Dune::MPIHelper::getCollectiveCommunication();
+    if (cc.max(exception_thrown) == 1) {
+        Opm::DeferredLogger global_deferredLogger = gatherDeferredLogger(deferred_logger);
+        if (terminal_output) {
+            global_deferredLogger.logMessages();
+        }
+        throw std::logic_error(message);
+    }
+}
 
-#endif // OPM_DEFERREDLOGGINGERRORMACROS_HPP
+#endif // OPM_DEFERREDLOGGINGERRORHELPERS_HPP

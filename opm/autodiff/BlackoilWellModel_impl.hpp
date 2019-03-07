@@ -263,7 +263,7 @@ namespace Opm {
         } catch (...) {
             exception_thrown = 1;
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(local_deferredLogger, exception_thrown, "computeRESV in BlackoilWellModel::() failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(local_deferredLogger, exception_thrown, "computeRESV in BlackoilWellModel::() failed.", terminal_output_);
 
         // update VFP properties
         vfp_properties_.reset (new VFPProperties<VFPInjProperties,VFPProdProperties> (
@@ -303,7 +303,7 @@ namespace Opm {
         } catch (...) {
             exception_thrown = 1;
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(local_deferredLogger, exception_thrown, "BlackoilWellModel::beginTimeStep() failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(local_deferredLogger, exception_thrown, "BlackoilWellModel::beginTimeStep() failed.", terminal_output_);
 
         // do the initialization for all the wells
         // TODO: to see whether we can postpone of the intialization of the well containers to
@@ -702,7 +702,7 @@ namespace Opm {
         } catch (...) {
             exception_thrown = 1;
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(local_deferredLogger, exception_thrown, "solveWellEq in BlackoilWellModel::assemble() failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(local_deferredLogger, exception_thrown, "solveWellEq in BlackoilWellModel::assemble() failed.", terminal_output_);
 
         Opm::DeferredLogger global_deferredLogger = gatherDeferredLogger(local_deferredLogger);
         if (terminal_output_) {
@@ -727,7 +727,7 @@ namespace Opm {
             }
         }
 
-        OPM_CHECK_FOR_EXCEPTIONS_AND_THROW(exception_thrown, "assembleWellEq failed.");
+        check_for_exceptions_and_throw(exception_thrown, "assembleWellEq failed.");
     }
 
     template<typename TypeTag>
@@ -919,7 +919,7 @@ namespace Opm {
                 }
             }
 
-            OPM_CHECK_FOR_EXCEPTIONS_AND_THROW(exception_thrown, "solveEqAndUpdateWellState in solveWellEq failed.");
+            check_for_exceptions_and_throw(exception_thrown, "solveEqAndUpdateWellState in solveWellEq failed.");
 
             // updateWellControls uses communication
             // Therefore the following is executed if there
@@ -985,7 +985,7 @@ namespace Opm {
             global_deferredLogger.logMessages();
         }
 
-        OPM_CHECK_FOR_EXCEPTIONS_AND_THROW(exception_thrown, "getWellConvergence failed.");
+        check_for_exceptions_and_throw(exception_thrown, "getWellConvergence failed.");
 
         ConvergenceReport report = gatherConvergenceReport(local_report);
 
@@ -1106,7 +1106,7 @@ namespace Opm {
             }
         } // end of for (int w = 0; w < nw; ++w)
 
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "computeWellPotentials in computeWellPotentials failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "computeWellPotentials in computeWellPotentials failed.", terminal_output_);
 
         // Store it in the well state
         well_state_.wellPotentials() = well_potentials;
@@ -1152,7 +1152,7 @@ namespace Opm {
                 break;
             }
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "checkWellOperability in prepareTimestep failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "checkWellOperability in prepareTimestep failed.", terminal_output_);
 
         // since the controls are all updated, we should update well_state accordingly
         for (const auto& well : well_container_) {
@@ -1182,14 +1182,14 @@ namespace Opm {
                 well_state_.setEffectiveEventsOccurred(w, false);
             }
         }  // end of for (const auto& well : well_container_)
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "updateWellStateWithTarget in prepareTimestep failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "updateWellStateWithTarget in prepareTimestep failed.", terminal_output_);
 
         try {
             updatePrimaryVariables(deferred_logger);
         } catch (...) {
             exception_thrown = 1;
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "updatePrimaryVariables in prepareTimestep failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "updatePrimaryVariables in prepareTimestep failed.", terminal_output_);
     }
 
 
@@ -1436,7 +1436,7 @@ namespace Opm {
                     break;
                 }
             }
-            OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "solveWellEq in BlackoilWellModel::assemble() failed.", terminal_output_);
+            check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "solveWellEq in BlackoilWellModel::assemble() failed.", terminal_output_);
         }
     }
 
@@ -1477,7 +1477,7 @@ namespace Opm {
                 break;
             }
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "updatePrimaryVariables in updatePrimaryVariables failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "updatePrimaryVariables in updatePrimaryVariables failed.", terminal_output_);
     }
 
 
@@ -1546,7 +1546,7 @@ namespace Opm {
                 break;
             }
         }
-        OPM_CHECK_FOR_EXCEPTIONS_AND_LOG_AND_THROW(deferred_logger, exception_thrown, "updatePrimaryVariables in updatePrimaryVariables failed.", terminal_output_);
+        check_for_exceptions_and_log_and_throw(deferred_logger, exception_thrown, "updatePrimaryVariables in updatePrimaryVariables failed.", terminal_output_);
     }
 
     template<typename TypeTag>
