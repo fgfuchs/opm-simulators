@@ -342,6 +342,7 @@ SET_BOOL_PROP(EclBaseProblem, EnableTemperature, true);
 SET_BOOL_PROP(EclBaseProblem, EnablePolymer, false);
 SET_BOOL_PROP(EclBaseProblem, EnableSolvent, false);
 SET_BOOL_PROP(EclBaseProblem, EnableEnergy, false);
+SET_BOOL_PROP(EclBaseProblem, EnableFoam, false);
 
 // disable thermal flux boundaries by default
 SET_BOOL_PROP(EclBaseProblem, EnableThermalFluxBoundaries, false);
@@ -394,6 +395,7 @@ class EclProblem : public GET_PROP_TYPE(TypeTag, BaseProblem)
     enum { enableSolvent = GET_PROP_VALUE(TypeTag, EnableSolvent) };
     enum { enablePolymer = GET_PROP_VALUE(TypeTag, EnablePolymer) };
     enum { enablePolymerMolarWeight = GET_PROP_VALUE(TypeTag, EnablePolymerMW) };
+    enum { enableFoam = GET_PROP_VALUE(TypeTag, EnableFoam) };
     enum { enableTemperature = GET_PROP_VALUE(TypeTag, EnableTemperature) };
     enum { enableEnergy = GET_PROP_VALUE(TypeTag, EnableEnergy) };
     enum { enableThermalFluxBoundaries = GET_PROP_VALUE(TypeTag, EnableThermalFluxBoundaries) };
@@ -425,6 +427,7 @@ class EclProblem : public GET_PROP_TYPE(TypeTag, BaseProblem)
 
     typedef BlackOilSolventModule<TypeTag> SolventModule;
     typedef BlackOilPolymerModule<TypeTag> PolymerModule;
+    typedef BlackOilFoamModule<TypeTag> FoamModule;
 
     typedef typename EclEquilInitializer<TypeTag>::ScalarFluidState InitialFluidState;
 
@@ -582,6 +585,7 @@ public:
         const auto& vanguard = simulator.vanguard();
         SolventModule::initFromDeck(vanguard.deck(), vanguard.eclState());
         PolymerModule::initFromDeck(vanguard.deck(), vanguard.eclState());
+        //FoamModule::initFromDeck(vanguard.deck(), vanguard.eclState());
         if (EWOMS_GET_PARAM(TypeTag, bool, EnableEclOutput))
             // create the ECL writer
             eclWriter_.reset(new EclWriterType(simulator));
