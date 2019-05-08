@@ -267,8 +267,6 @@ int main(int argc, char** argv)
         }
         // Foam case
         else if ( phases.active( Opm::Phase::FOAM ) ) {
-            std::cerr<<" I am here!\n";
-            exit(1);
             Opm::flowEbosFoamSetDeck(externalSetupTimer.elapsed(), *deck, *eclipseState, *schedule, *summaryConfig);
             return Opm::flowEbosFoamMain(argc, argv);
         }

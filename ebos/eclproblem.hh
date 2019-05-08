@@ -585,7 +585,7 @@ public:
         const auto& vanguard = simulator.vanguard();
         SolventModule::initFromDeck(vanguard.deck(), vanguard.eclState());
         PolymerModule::initFromDeck(vanguard.deck(), vanguard.eclState());
-        //FoamModule::initFromDeck(vanguard.deck(), vanguard.eclState());
+        FoamModule::initFromDeck(vanguard.deck(), vanguard.eclState());
         if (EWOMS_GET_PARAM(TypeTag, bool, EnableEclOutput))
             // create the ECL writer
             eclWriter_.reset(new EclWriterType(simulator));
