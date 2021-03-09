@@ -124,8 +124,27 @@ namespace Opm
 #if HAVE_MPI
             comm_.reset( new CommunicationType( simulator_.vanguard().grid().comm() ) );
 #endif
-            parameters_.template init<TypeTag>();
-            prm_ = setupPropertyTree<TypeTag>(parameters_);
+            // please put me back!!! prm_ = setupPropertyTree<TypeTag>(parameters_);
+            // ------------ the following is hard coded for testing purposes!!!
+            {
+                FlowLinearSolverParameters para;
+                para.init<TypeTag>();
+                para.linsolver_ = "ilu0";
+                parameters_.push_back(para);
+                prm_.push_back(setupPropertyTree<TypeTag>(parameters_[0]));
+            }
+            {
+                FlowLinearSolverParameters para;
+                para.init<TypeTag>();
+                para.linsolver_ = "cpr";
+                parameters_.push_back(para);
+                prm_.push_back(setupPropertyTree<TypeTag>(parameters_[1]));
+            }
+
+            flexibleSolver_.resize(prm_.size());
+            linearOperatorForFlexibleSolver_.resize(prm_.size());
+            wellOperator_.resize(prm_.size());
+            // ------------
 #if HAVE_CUDA || HAVE_OPENCL
             {
                 std::string gpu_mode = EWOMS_GET_PARAM(TypeTag, std::string, GpuMode);
@@ -140,7 +159,7 @@ namespace Opm
                 const int maxit = EWOMS_GET_PARAM(TypeTag, int, LinearSolverMaxIter);
                 const double tolerance = EWOMS_GET_PARAM(TypeTag, double, LinearSolverReduction);
                 const std::string opencl_ilu_reorder = EWOMS_GET_PARAM(TypeTag, std::string, OpenclIluReorder);
-                const int linear_solver_verbosity = parameters_.linear_solver_verbosity_;
+                const int linear_solver_verbosity = parameters_[activeSolverNum_].linear_solver_verbosity_;
                 bdaBridge.reset(new BdaBridge<Matrix, Vector, block_size>(gpu_mode, linear_solver_verbosity, maxit, tolerance, platformID, deviceID, opencl_ilu_reorder));
             }
 #else
@@ -171,8 +190,11 @@ namespace Opm
             // Print parameters to PRT/DBG logs.
             if (on_io_rank) {
                 std::ostringstream os;
-                os << "Property tree for linear solver:\n";
-                boost::property_tree::write_json(os, prm_, true);
+                os << "Property tree for linear solvers:\n";
+                for (std::size_t i = 0; i<prm_.size(); i++) {
+                    boost::property_tree::write_json(os, prm_[i], true);
+                    std::cerr<< "debug: ["<<i<<"] : " << os.str() <<std::endl;
+                }
                 OpmLog::note(os.str());
             }
         }
@@ -181,8 +203,18 @@ namespace Opm
         void eraseMatrix() {
         }
 
+        void chooseActiveSolver()
+        {
+            activeSolverNum_ = (activeSolverNum_+1)%2;
+            auto cc = Dune::MPIHelper::getCollectiveCommunication();
+            if (cc.rank() == 0) {
+                OpmLog::note("Active solver = "+std::to_string(activeSolverNum_)+"\n");
+            }
+        }
+
         void prepare(const SparseMatrixAdapter& M, Vector& b)
         {
+            chooseActiveSolver();
             static bool firstcall = true;
 #if HAVE_MPI
             if (firstcall && parallelInformation_.type() == typeid(ParallelISTLInformation)) {
@@ -209,7 +241,7 @@ namespace Opm
             }
             rhs_ = &b;
 
-            if (isParallel() && prm_.get<std::string>("preconditioner.type") != "ParOverILU0") {
+            if (isParallel() && prm_[activeSolverNum_].get<std::string>("preconditioner.type") != "ParOverILU0") {
                 makeOverlapRowsInvalid(getMatrix());
             }
             prepareFlexibleSolver();
@@ -231,7 +263,7 @@ namespace Opm
 
         bool solve(Vector& x) {
             // Write linear system if asked for.
-            const int verbosity = prm_.get<int>("verbosity", 0);
+            const int verbosity = prm_[activeSolverNum_].get<int>("verbosity", 0);
             const bool write_matrix = verbosity > 10;
             if (write_matrix) {
                 Opm::Helper::writeSystem(simulator_, //simulator is only used to get names
@@ -279,8 +311,8 @@ namespace Opm
 
             // Otherwise, use flexible istl solver.
             if (!gpu_was_used) {
-                assert(flexibleSolver_);
-                flexibleSolver_->apply(x, *rhs_, result);
+                assert(flexibleSolver_[activeSolverNum_]);
+                flexibleSolver_[activeSolverNum_]->apply(x, *rhs_, result);
             }
 
             // Check convergence, iterations etc.
@@ -325,7 +357,7 @@ namespace Opm
             converged_ = result.converged;
 
             // Check for failure of linear solver.
-            if (!parameters_.ignoreConvergenceFailure_ && !result.converged) {
+            if (!parameters_[activeSolverNum_].ignoreConvergenceFailure_ && !result.converged) {
                 const std::string msg("Convergence failure for linear solver.");
                 OPM_THROW_NOLOG(NumericalIssue, msg);
             }
@@ -342,7 +374,6 @@ namespace Opm
 
         void prepareFlexibleSolver()
         {
-
             std::function<Vector()> weightsCalculator = getWeightsCalculator();
 
             if (shouldCreateSolver()) {
@@ -350,31 +381,31 @@ namespace Opm
 #if HAVE_MPI
                     if (useWellConn_) {
                         using ParOperatorType = Dune::OverlappingSchwarzOperator<Matrix, Vector, Vector, Comm>;
-                        linearOperatorForFlexibleSolver_ = std::make_unique<ParOperatorType>(getMatrix(), *comm_);
-                        flexibleSolver_ = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_, *comm_, prm_, weightsCalculator);
+                        linearOperatorForFlexibleSolver_[activeSolverNum_] = std::make_unique<ParOperatorType>(getMatrix(), *comm_);
+                        flexibleSolver_[activeSolverNum_] = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_[activeSolverNum_], *comm_, prm_[activeSolverNum_], weightsCalculator);
                     } else {
                         using ParOperatorType = WellModelGhostLastMatrixAdapter<Matrix, Vector, Vector, true>;
-                        wellOperator_ = std::make_unique<WellModelOperator>(simulator_.problem().wellModel());
-                        linearOperatorForFlexibleSolver_ = std::make_unique<ParOperatorType>(getMatrix(), *wellOperator_, interiorCellNum_);
-                        flexibleSolver_ = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_, *comm_, prm_, weightsCalculator);
+                        wellOperator_[activeSolverNum_] = std::make_unique<WellModelOperator>(simulator_.problem().wellModel());
+                        linearOperatorForFlexibleSolver_[activeSolverNum_] = std::make_unique<ParOperatorType>(getMatrix(), *wellOperator_[activeSolverNum_], interiorCellNum_);
+                        flexibleSolver_[activeSolverNum_] = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_[activeSolverNum_], *comm_, prm_[activeSolverNum_], weightsCalculator);
                     }
 #endif
                 } else {
                     if (useWellConn_) {
                         using SeqOperatorType = Dune::MatrixAdapter<Matrix, Vector, Vector>;
-                        linearOperatorForFlexibleSolver_ = std::make_unique<SeqOperatorType>(getMatrix());
-                        flexibleSolver_ = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_, prm_, weightsCalculator);
+                        linearOperatorForFlexibleSolver_[activeSolverNum_] = std::make_unique<SeqOperatorType>(getMatrix());
+                        flexibleSolver_[activeSolverNum_] = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_[activeSolverNum_], prm_[activeSolverNum_], weightsCalculator);
                     } else {
                         using SeqOperatorType = WellModelMatrixAdapter<Matrix, Vector, Vector, false>;
-                        wellOperator_ = std::make_unique<WellModelOperator>(simulator_.problem().wellModel());
-                        linearOperatorForFlexibleSolver_ = std::make_unique<SeqOperatorType>(getMatrix(), *wellOperator_);
-                        flexibleSolver_ = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_, prm_, weightsCalculator);
+                        wellOperator_[activeSolverNum_] = std::make_unique<WellModelOperator>(simulator_.problem().wellModel());
+                        linearOperatorForFlexibleSolver_[activeSolverNum_] = std::make_unique<SeqOperatorType>(getMatrix(), *wellOperator_[activeSolverNum_]);
+                        flexibleSolver_[activeSolverNum_] = std::make_unique<FlexibleSolverType>(*linearOperatorForFlexibleSolver_[activeSolverNum_], prm_[activeSolverNum_], weightsCalculator);
                     }
                 }
             }
             else
             {
-                flexibleSolver_->preconditioner().update();
+                flexibleSolver_[activeSolverNum_]->preconditioner().update();
             }
         }
 
@@ -385,25 +416,28 @@ namespace Opm
         {
             // Decide if we should recreate the solver or just do
             // a minimal preconditioner update.
-            if (!flexibleSolver_) {
+            if (flexibleSolver_.size()==0) {
                 return true;
             }
-            if (this->parameters_.cpr_reuse_setup_ == 0) {
+            if (!flexibleSolver_[activeSolverNum_]) {
+                return true;
+            }
+            if (this->parameters_[activeSolverNum_].cpr_reuse_setup_ == 0) {
                 // Always recreate solver.
                 return true;
             }
-            if (this->parameters_.cpr_reuse_setup_ == 1) {
+            if (this->parameters_[activeSolverNum_].cpr_reuse_setup_ == 1) {
                 // Recreate solver on the first iteration of every timestep.
                 const int newton_iteration = this->simulator_.model().newtonMethod().numIterations();
                 return newton_iteration == 0;
             }
-            if (this->parameters_.cpr_reuse_setup_ == 2) {
+            if (this->parameters_[activeSolverNum_].cpr_reuse_setup_ == 2) {
                 // Recreate solver if the last solve used more than 10 iterations.
                 return this->iterations() > 10;
             }
 
             // Otherwise, do not recreate solver.
-            assert(this->parameters_.cpr_reuse_setup_ == 3);
+            assert(this->parameters_[activeSolverNum_].cpr_reuse_setup_ == 3);
 
             return false;
         }
@@ -414,11 +448,11 @@ namespace Opm
         {
             std::function<Vector()> weightsCalculator;
 
-            auto preconditionerType = prm_.get("preconditioner.type", "cpr");
+            auto preconditionerType = prm_[activeSolverNum_].get("preconditioner.type", "cpr");
             if (preconditionerType == "cpr" || preconditionerType == "cprt") {
                 const bool transpose = preconditionerType == "cprt";
-                const auto weightsType = prm_.get("preconditioner.weight_type", "quasiimpes");
-                const auto pressureIndex = this->prm_.get("preconditioner.pressure_var_index", 1);
+                const auto weightsType = prm_[activeSolverNum_].get("preconditioner.weight_type", "quasiimpes");
+                const auto pressureIndex = this->prm_[activeSolverNum_].get("preconditioner.pressure_var_index", 1);
                 if (weightsType == "quasiimpes") {
                     // weighs will be created as default in the solver
                     weightsCalculator = [this, transpose, pressureIndex]() {
@@ -494,9 +528,11 @@ namespace Opm
         Matrix* matrix_;
         Vector *rhs_;
 
-        std::unique_ptr<FlexibleSolverType> flexibleSolver_;
-        std::unique_ptr<AbstractOperatorType> linearOperatorForFlexibleSolver_;
-        std::unique_ptr<WellModelAsLinearOperator<WellModel, Vector, Vector>> wellOperator_;
+        int activeSolverNum_ = 0;
+
+        std::vector<std::unique_ptr<FlexibleSolverType>> flexibleSolver_;
+        std::vector<std::unique_ptr<AbstractOperatorType>> linearOperatorForFlexibleSolver_;
+        std::vector<std::unique_ptr<WellModelAsLinearOperator<WellModel, Vector, Vector>>> wellOperator_;
         std::vector<int> overlapRows_;
         std::vector<int> interiorRows_;
         std::vector<std::set<int>> wellConnectionsGraph_;
@@ -504,8 +540,8 @@ namespace Opm
         bool useWellConn_;
         size_t interiorCellNum_;
 
-        FlowLinearSolverParameters parameters_;
-        boost::property_tree::ptree prm_;
+        std::vector<FlowLinearSolverParameters> parameters_;
+        std::vector<boost::property_tree::ptree> prm_;
         bool scale_variables_;
 
         std::shared_ptr< CommunicationType > comm_;
